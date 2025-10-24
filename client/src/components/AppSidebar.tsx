@@ -5,34 +5,22 @@ import {
   ClipboardList,
   MessageSquare,
   BarChart3,
-  User,
-  Settings,
   LogOut,
+  Car,
 } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/contexts/AuthContext';
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarHeader,
-  SidebarFooter,
-} from '@/components/ui/sidebar';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { Separator } from '@/components/ui/separator';
+import { Badge } from '@/components/ui/badge';
 
 export function AppSidebar() {
   const { t } = useTranslation();
   const [location] = useLocation();
   const { user, logout } = useAuth();
 
-  // Navigation items based on role
   const getNavigationItems = () => {
     const items = [
       {
@@ -79,69 +67,76 @@ export function AppSidebar() {
   const navigationItems = getNavigationItems();
 
   return (
-    <Sidebar data-testid="sidebar">
-      <SidebarHeader className="p-4 border-b">
+    <aside
+      className="w-64 bg-card border-r flex flex-col shrink-0"
+      data-testid="sidebar"
+    >
+      <div className="p-6 border-b">
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 bg-primary rounded-md flex items-center justify-center">
-            <Wrench className="h-6 w-6 text-primary-foreground" />
+          <div className="h-12 w-12 bg-gradient-to-br from-green-600 to-green-700 rounded-lg flex items-center justify-center shadow-lg">
+            <Car className="h-7 w-7 text-white" />
           </div>
           <div className="flex flex-col">
-            <span className="font-semibold text-lg">{t('app.title')}</span>
-            <span className="text-xs text-muted-foreground">{t('app.tagline')}</span>
+            <span className="font-bold text-lg leading-tight">{t('app.title')}</span>
+            <span className="text-xs text-muted-foreground leading-tight">{t('app.tagline')}</span>
           </div>
         </div>
-      </SidebarHeader>
+      </div>
 
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>{t('nav.dashboard')}</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {navigationItems.map((item) => (
-                <SidebarMenuItem key={item.url}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={location === item.url}
-                    data-testid={`link-${item.url.replace('/', '')}`}
-                  >
-                    <Link href={item.url}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-      </SidebarContent>
+      <nav className="flex-1 overflow-y-auto p-4 space-y-1">
+        {navigationItems.map((item) => {
+          const isActive = location === item.url;
+          return (
+            <Link key={item.url} href={item.url}>
+              <button
+                className={`
+                  w-full flex items-center gap-3 px-4 py-3 rounded-lg
+                  text-sm font-medium transition-all
+                  ${
+                    isActive
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'text-muted-foreground hover-elevate active-elevate-2'
+                  }
+                `}
+                data-testid={`link-${item.url.replace('/', '')}`}
+              >
+                <item.icon className="h-5 w-5 shrink-0" />
+                <span className="truncate">{item.title}</span>
+              </button>
+            </Link>
+          );
+        })}
+      </nav>
 
-      <SidebarFooter className="p-4 border-t">
-        <div className="flex items-center justify-between gap-2">
-          <Link href="/profile" className="flex items-center gap-2 flex-1 min-w-0">
-            <Avatar className="h-8 w-8">
-              <AvatarFallback className="bg-primary text-primary-foreground text-sm">
+      <Separator />
+
+      <div className="p-4 space-y-4">
+        <Link href="/profile">
+          <div className="flex items-center gap-3 p-3 rounded-lg hover-elevate active-elevate-2 cursor-pointer">
+            <Avatar className="h-10 w-10">
+              <AvatarFallback className="bg-gradient-to-br from-green-600 to-green-700 text-white font-semibold">
                 {user?.fullName?.charAt(0).toUpperCase() || 'U'}
               </AvatarFallback>
             </Avatar>
-            <div className="flex flex-col min-w-0 flex-1">
-              <span className="text-sm font-medium truncate">{user?.fullName}</span>
-              <span className="text-xs text-muted-foreground truncate">
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-semibold truncate">{user?.fullName}</div>
+              <Badge variant="secondary" className="text-xs mt-1">
                 {t(`roles.${user?.role || 'customer'}`)}
-              </span>
+              </Badge>
             </div>
-          </Link>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={logout}
-            data-testid="button-logout"
-            className="shrink-0"
-          >
-            <LogOut className="h-4 w-4" />
-          </Button>
-        </div>
-      </SidebarFooter>
-    </Sidebar>
+          </div>
+        </Link>
+
+        <Button
+          variant="outline"
+          className="w-full gap-2"
+          onClick={logout}
+          data-testid="button-logout"
+        >
+          <LogOut className="h-4 w-4" />
+          {t('auth.logout')}
+        </Button>
+      </div>
+    </aside>
   );
 }
