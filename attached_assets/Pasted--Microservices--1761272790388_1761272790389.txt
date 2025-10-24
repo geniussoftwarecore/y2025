@@ -1,0 +1,522 @@
+اتّبع التعليمات حرفيًا. ابنِ المنصة وفق معمارية الخدمات المصغّرة Microservices. اجعل كل وحدة خدمية مستقلة في حاوية Docker، وتواصل بين الخدمات عبر REST على شبكة Docker الداخلية. استخدم Python/FastAPI للخدمات الخلفية، PostgreSQL لقاعدة البيانات، وReact.js لواجهة المستخدم. نفّذ JWT للمصادقة والتخويل. التزم بالدعم الثنائي اللغة (عربي/إنجليزي) مع RTL كامل للعربية. لا تُضمّن أي ميزة ذكاء اصطناعي داخل النظام حاليًا. وفّر اختبارات ووثائق وملفات تهيئة كاملة.
+
+0) الإعداد العام للمشروع
+
+أنشئ مستودعًا جذريًا باسم yemen-hybrid يحوي مجلدات عليا كالتالي:
+
+yemen-hybrid/
+  docker/
+  deploy/
+  gateway/
+  services/
+    user_service/
+    service_catalog/
+    chat_service/
+    work_orders/
+    reports_service/
+  frontend/
+  ops/
+  docs/
+
+
+أنشئ ملف docker-compose.yml في الجذر لتشغيل جميع الخدمات + PostgreSQL + Nginx (Gateway) + أي تبعيات.
+
+أنشئ قاعدة بيانات PostgreSQL باسم yemen_hybrid، ومستخدم DB مخصص عبر البيئة.
+
+التزم بمبدأ Twelve-Factor: استخدم ملفات .env (مثال: .env, .env.user_service, …) لكل خدمة.
+
+اعتمد المنافذ الافتراضية:
+
+Gateway (Nginx/Reverse Proxy): :80 (وممكن 443 لاحقًا)
+
+user_service: :8001
+
+service_catalog: :8002
+
+work_orders: :8003
+
+chat_service: :8004 (WebSockets + REST)
+
+reports_service: :8005
+
+frontend (React dev): :3000
+
+فعّل شبكة Docker داخلية باسم yh_net.
+
+أضف Nginx كـ API Gateway/Reverse Proxy يوجّه المسارات إلى الخدمات بالمسارات التالية:
+
+/api/users/* ⇢ user_service
+
+/api/catalog/* ⇢ service_catalog
+
+/api/work/* ⇢ work_orders
+
+/api/chat/* ⇢ chat_service
+
+/api/reports/* ⇢ reports_service
+
+/ ⇢ frontend (ملفات مبنية إنتاجيًا)
+
+1) المصادقة والصلاحيات (الوحدة الأولى: إدارة المستخدمين والصلاحيات)
+
+ابنِ user_service بخلفية FastAPI لإدارة المستخدمين والأدوار والصلاحيات وفق RBAC. فعّل JWT، واحفظ كلمات السر باستخدام Bcrypt. وفّر إدارة كاملة للمستخدمين من واجهة المدير.
+
+1.1 إنشاء user_service
+
+أنشئ مجلد services/user_service.
+
+داخلها:
+
+app/
+  main.py
+  api/
+    routes_auth.py
+    routes_users.py
+    routes_roles.py
+  core/
+    config.py
+    security.py
+    deps.py
+  db/
+    base.py
+    session.py
+    models.py
+    crud/
+      users.py
+      roles.py
+  schemas/
+    auth.py
+    user.py
+    role.py
+  tests/
+Dockerfile
+requirements.txt
+.env.user_service
+alembic/ (للهجرات)
+
+
+أدرج حزمة: fastapi, uvicorn, python-jose[cryptography], passlib[bcrypt], pydantic, SQLAlchemy, alembic, psycopg2-binary.
+
+1.2 نمذجة البيانات (PostgreSQL)
+
+جدول users:
+
+id (UUID PK), full_name, email (unique), username (unique), hashed_password, is_active, preferred_language (ar|en), specialization (Nullable: electric, mechanic, battery … للمهندسين), created_at, updated_at.
+
+جدول roles:
+
+id (PK), name in {admin, supervisor, engineer, sales, customer}.
+
+جدول user_roles (many-to-many).
+
+فهارس على email/username.
+
+1.3 المصادقة والتخويل
+
+تسجيل الدخول: POST /api/users/auth/login (username أو email + password) → JWT Access Token + Refresh.
+
+تسجيل العملاء: POST /api/users/auth/register (للعملاء فقط افتراضيًا، أو عبر المدير للموظفين).
+
+استعادة كلمة المرور:
+
+POST /api/users/auth/forgot (يرسل رمز تحقق بالبريد)
+
+POST /api/users/auth/reset (تغيير عبر رمز ساري)
+
+طبّق سياسات كلمات مرور قوية.
+
+فعّل Authorization على كل Endpoint وفق الدور.
+
+احجب الأزرار والروابط في الواجهة الأمامية حسب الدور أيضًا.
+
+1.4 إدارة المستخدمين
+
+CRUD للمستخدمين:
+
+GET /api/users (بحث/فرز حسب role/status)
+
+POST /api/users (إنشاء موظف من قبل admin)
+
+PATCH /api/users/{id} (تعديل بيانات، تغيير دور/تفعيل/تعطيل)
+
+DELETE /api/users/{id} (تعطيل منطقي إن أمكن)
+
+واجهة React (لوحة المدير): جدول مستخدمين + بحث + فلاتر + نماذج إضافة/تعديل.
+
+تخصيص الملف الشخصي لكل مستخدم: GET/PUT /api/users/me لتغيير الاسم/البريد/اللغة/كلمة المرور.
+
+للمهندسين: حقل specialization لتوجيه المهام لاحقًا.
+
+2) إدارة الخدمات وقطع الغيار وربط المهندسين (الوحدة الثانية)
+
+ابنِ service_catalog لتخزين الخدمات والقطع والتخصصات وربطها، دون إدارة مخزون حي.
+
+2.1 إنشاء service_catalog
+
+مجلد services/service_catalog بتركيب مشابه (FastAPI + SQLAlchemy + Alembic).
+
+نماذج DB:
+
+services: id, name_ar, name_en, desc_ar, desc_en, price (numeric), expected_duration_minutes (int, optional), is_active, created_at.
+
+spare_parts: id, name_ar, name_en, part_code (nullable), unit_price, is_active.
+
+specializations: id, code in {electric, mechanic, battery, ...}, name_ar, name_en.
+
+service_specialization: (service_id, specialization_id). فهارس مناسبة.
+
+2.2 API أساسي
+
+خدمات:
+
+POST /api/catalog/services, GET /api/catalog/services, GET /{id}, PATCH /{id}, DELETE /{id} (تعطيل منطقي).
+
+قطع الغيار:
+
+Endpoints مماثلة.
+
+تخصصات: CRUD بسيط (يعرفها المدير).
+
+صلاحيات: admin/supervisor لإضافة/تعديل، العرض للجميع حسب الحاجة.
+
+تكامل مع user_service للتحقق من الدور عبر JWT (gateway أو via service-to-service token).
+
+2.3 واجهة الإدارة
+
+شاشة React موحدة باسم “إعدادات الورشة”: تبويب الخدمات وقطع الغيار والتخصصات.
+
+نماذج ثنائية اللغة (ar/en).
+
+لا تُطبّق إدارة مخزون.
+
+3) الدردشة الداخلية ودردشة العملاء (الوحدة الثالثة)
+
+ابنِ chat_service كخدمة مستقلة تدعم WebSockets (FastAPI) + REST. افصل “الدردشة الداخلية” عن “دردشة العملاء مع المبيعات”. خزّن السجلات.
+
+3.1 إنشاء chat_service
+
+مجلد services/chat_service.
+
+اعتمد FastAPI مع websockets أو fastapi[all] وuvicorn.
+
+استخدم PostgreSQL لتخزين:
+
+channels (عام/خاصة/حسب القسم)،
+
+messages (id, channel_id, sender_id, body, attachment_meta, created_at, is_read),
+
+customer_threads (ربط عميل بموظف مبيعات أو Queue توزيع).
+
+3.2 قنوات داخلية
+
+قنوات افتراضية: general, tech, sales, بالإضافة إلى رسائل خاصة 1:1.
+
+إشعارات فورية عبر WebSocket + إشعار مرئي في React (Badge/Toast).
+
+أرشفة كاملة قابلة للبحث (للمدير/المشرف).
+
+3.3 دردشة العملاء (Customer–Sales)
+
+واجهة العميل: نافذة محادثة مع المبيعات فقط.
+
+واجهة موظف المبيعات: قائمة محادثات العملاء + توزيع تلقائي/يدوي.
+
+منع وصول المهندسين للدردشات مع العملاء.
+
+دعم مرفقات بسيطة بصلاحيات/فلترة امتدادات.
+
+4) (محجوزة للتطوير المستقبلي – بدون ذكاء اصطناعي الآن)
+
+لا تنفّذ أي روبوت دردشة أو GPT الآن. أبقِ هذه الوحدة Placeholder لتوسعة مستقبلية. لا تضف أي تبعيات AI.
+
+5) التقارير والتحليلات (الوحدة الخامسة)
+
+ابنِ reports_service لتجميع بيانات عبر REST من الخدمات الأخرى، وإنتاج تقارير ولوحات تفاعلية قابلة للتصفية والتصدير.
+
+5.1 إنشاء reports_service
+
+مجلد services/reports_service.
+
+لا تتصل مباشرة بقاعدة بيانات خدمات أخرى؛ احصل البيانات عبر REST موثق.
+
+فعّل طبقة Cache اختيارية (in-memory أو Redis لاحقًا).
+
+5.2 أنواع التقارير (Endpoints + واجهة)
+
+تاريخ صيانة السيارة (VIN/Plate):
+
+يعرض الزيارات، الخدمات المنفذة، القطع المستخدمة، التكاليف، والمهندس المشرف، بتواريخ الدخول/الخروج.
+
+عدد الزيارات (Visit Frequency):
+
+إجمالي شهري/سنوي، توزيع حسب نوع الخدمة/نوع السيارة/عميل.
+
+أوقات التنفيذ:
+
+متوسط وزمن فعلي مقابل المتوقع لكل خدمة ولكل مهندس.
+
+أداء المهندسين:
+
+مهام مكتملة، زمن إنجاز، رضا العملاء (إن وجد لاحقًا)، معدلات إعادة العمل.
+
+أداء المبيعات:
+
+طلبات جديدة، صفقات إضافية، زمن الرد في الدردشة.
+
+مؤشرات الورشة العامة:
+
+الإيرادات من الخدمات والقطع، معدل إشغال الورشة، نسبة التسليم في الموعد.
+
+استهلاك قطع الغيار:
+
+كمية استخدام لكل قطعة خلال فترة + ربط بالخدمات.
+
+تقارير العملاء:
+
+الجدد/المتكررين، الأكثر إنفاقًا، الغائبين منذ مدة.
+
+5.3 الواجهة
+
+في React، أنشئ لوحة تحكم “التقارير” باستخدام Recharts/Charts.js.
+
+أضف فلاتر التاريخ (يومي/شهري/ربعي/سنوي)، والنوع/السيارة/المهندس.
+
+أضف زر تصدير PDF/Excel.
+
+6) الدعم الثنائي اللغة والتصميم والتوافق (الوحدة السادسة)
+
+اجعل الواجهة ثنائية اللغة بالكامل مع RTL للعربية وLTR للإنجليزية. اختبر جميع الشاشات باللغتين وعلى أجهزة مختلفة.
+
+6.1 إعداد React
+
+مجلد frontend/ بمشروع React Vite أو CRA.
+
+بنية:
+
+src/
+  i18n/
+    ar.json
+    en.json
+  components/
+  pages/
+    auth/
+    admin/
+    catalog/
+    chat/
+    reports/
+    work/
+    profile/
+  routes/
+  store/
+  utils/
+  styles/
+
+
+أضف i18n (مثلاً i18next) بتحميل ar/en JSON.
+
+نفّذ مفتاح تبديل اللغة (Header).
+
+عند اختيار العربية:
+
+اضبط dir="rtl" على <html> أو الجذر،
+
+اعكس التخطيطات والقوائم والسهام.
+
+استخدم تصميم حديث، ألوان وهوية “يمن هايبرد” (ضع شعار الشركة في الهيدر).
+
+اختبر النصوص الطويلة وكسر الأسطر.
+
+وفّر Tooltips وإرشادات باللغتين.
+
+7) الأمان وضمان الجودة (الوحدة السابعة)
+
+طبّق HTTPS، خزّن كلمات المرور مشفرة، فعّل RBAC في الواجهة والخادم، أجرِ اختبارات، حسّن الأداء، واجمع السجلات والتنبيهات.
+
+7.1 الأمان
+
+كل الاتصالات عبر HTTPS (بوابة Nginx + شهادات لاحقًا).
+
+لا تعرض معلومات حساسة على الواجهة.
+
+امنع SQLi باستخدام ORM، وXSS عبر ترشيح المدخلات.
+
+لا تكشف مفاتيح/أسرار في الواجهة؛ خزّنها في الخوادم.
+
+استخدم UUIDs/IDs غير قابلة للتخمين.
+
+7.2 الاختبارات
+
+اختبارات وحدة لكل خدمة (Pytest).
+
+اختبارات تكامل (مثلاً إنشاء طلب صيانة ينعكس في التقارير).
+
+اختبارات قبول مستخدمين (UAT) لأدوار: admin/supervisor/engineer/sales/customer.
+
+7.3 الأداء والموثوقية
+
+Cache للبيانات المتكررة (خاصة التقارير).
+
+قابلية التوسع الأفقي عبر Docker (تكرار الحاويات خلف Nginx).
+
+مركزية Logs + Alerts عند الأعطال الجسيمة.
+
+سيناريوهات فشل/تعافي للخدمات الحرجة (مثل chat_service).
+
+7.4 ضمان الجودة الشامل
+
+نفّذ اختبار End-to-End قبل الإطلاق.
+
+اعتبر هذا البرومت وثيقة مرجعية للاختبارات: لكل بند اختبار تحقق مطابق.
+
+8) وحدة أوامر عمل الصيانة (Work Orders) — (ضمن النطاق العام)
+
+ابنِ خدمة work_orders لمعالجة دورة الحياة الكاملة لطلب الصيانة: إنشاء الطلب من المبيعات، تعيين المهندس تلقائيًا حسب التخصص والتوفر، تسجيل وقت البدء/الإنهاء، تسجيل قطع الغيار المستخدمة، تكلفة الزيارة، حالة التسليم.
+
+8.1 إنشاء work_orders
+
+مجلد services/work_orders.
+
+نماذج DB:
+
+work_orders: id, customer_id, vehicle_ident (VIN أو plate), status in {new, assigned, in_progress, done, delivered, cancelled}, opened_by (sales_id), assigned_engineer_id, service_id, opened_at, started_at, finished_at, delivered_at, notes, total_cost.
+
+work_order_parts: id, work_order_id, part_id, qty, unit_price, line_total.
+
+work_order_events: تاريخي (log) لتغيرات الحالة والتعيينات.
+
+8.2 منطق التعيين
+
+عند إنشاء طلب:
+
+ابحث عن مهندسين بتخصص الخدمة (service_specialization).
+
+رشّح المتاحين (بسيطًا: أقل عدد مهام جارية، أو “غير مشغول”).
+
+عيّن تلقائيًا، مع إمكانية المشرف لتغيير التعيين يدويًا.
+
+إن لم يوجد متاح، أعد تنبيه وإبقاء الحالة new مع ملاحظة “لا يوجد مهندس متاح في هذا التخصص”.
+
+8.3 دورة الحياة
+
+POST /api/work/orders (إنشاء من المبيعات)
+
+PATCH /api/work/orders/{id}/assign (المشرف/المدير)
+
+PATCH /api/work/orders/{id}/start (المهندس) ⇒ يضبط started_at
+
+PATCH /api/work/orders/{id}/finish (المهندس) ⇒ يضبط finished_at ويحسب وقت التنفيذ
+
+PATCH /api/work/orders/{id}/deliver (المبيعات/المشرف) ⇒ يضبط delivered_at ويغلق الطلب
+
+GET /api/work/orders?filters... (قوائم، بحث، فرز)
+
+تسجيل قطع الغيار أثناء التنفيذ:
+
+POST /api/work/orders/{id}/parts (المهندس/المشرف) مع part_id, qty (يسحب سعر القطعة من catalog)
+
+احتساب total_cost = service.price + Σ(parts.qty * unit_price).
+
+8.4 التكامل مع التقارير
+
+عند كل تغيير حالة/أوقات، أرسل حدثًا أو اجعل reports_service يسحب دوريًا للتجميع.
+
+احفظ timestamps بدقة (UTC) للمقارنات.
+
+8.5 واجهة React
+
+المبيعات: نموذج إنشاء طلب + متابعة حالة الطلبات الخاصة بعملائه.
+
+المشرف: لوحة توزيع/إعادة تعيين + نظرة عامة على الحمل والتأخيرات.
+
+المهندس: قائمة مهامه + أزرار بدء/إنهاء + إضافة قطع.
+
+العميل: صفحة “طلباتي” تعرض الحالة وخط الزمن (Timeline) لكل طلب.
+
+9) الواجهة الأمامية (React)
+
+ابنِ تطبيق React ثنائي اللغة، متجاوب، يحترم RBAC على مستوى الواجهة، ويتصل بكل الخدمات عبر Nginx Gateway.
+
+9.1 بنية التطبيق
+
+صفحات رئيسية حسب الأدوار:
+
+Admin: إدارة المستخدمين والصلاحيات، إعدادات الورشة (خدمات/قطع/تخصصات).
+
+Supervisor: لوحة متابعة، توزيع مهام، تقارير أساسية.
+
+Engineer: لوحة مهامي، بدء/إنهاء، إضافة قطع.
+
+Sales: إنشاء طلبات، دردشة العملاء، متابعة التسليم.
+
+Customer: حالة سيارتي/طلباتي، دردشة مع المبيعات، تاريخ الصيانة.
+
+مكوّن AuthGuard يتحقق من JWT + claims (role).
+
+إدارة حالة (Redux Toolkit أو Zustand) للتوكن والملفات الشخصية.
+
+9.2 الترجمة والتخطيط
+
+حمّل ar.json وen.json لجميع النصوص (عناوين/أزرار/رسائل).
+
+document.dir = 'rtl' عند العربية، وعكس التخطيطات.
+
+صمّم تنقل واضح (Sidebar + Topbar) وتبنَّ سلوك Mobile مناسب.
+
+9.3 استهلاك الـ APIs
+
+أنشئ طبقة apiClient تضيف JWT تلقائيًا وتتعامل مع أخطاء 401/403.
+
+نفّذ شاشات CRUD كاملة لكل وحدة.
+
+10) البوابة (Nginx) وDocker Compose
+
+اضبط Nginx كواجهة موحّدة. ابنِ صور Docker لكل خدمة. استخدم Compose لتشغيل الكل معًا.
+
+10.1 Nginx
+
+ملف gateway/nginx.conf يعرّف upstreams ويحول المسارات كما ذُكر سابقًا.
+
+أضف ضغط Gzip وHeaders أمنية (CORS حسب الدومين).
+
+10.2 Dockerfiles
+
+لكل خدمة FastAPI:
+
+Python:3.12-slim
+
+يثبّت المتطلبات، يشغل uvicorn app.main:app --host 0.0.0.0 --port XXX
+
+للـ React:
+
+بناء إنتاجي (npm run build) ثم خادم ملفات ثابتة (يمكن تقديمها عبر Nginx نفسه).
+
+10.3 docker-compose.yml
+
+خدمـة db (PostgreSQL) + volume دائم.
+
+تعريف الشبكة yh_net.
+
+خدمات user, catalog, work, chat, reports, frontend, gateway.
+
+ربط المتغيرات من .env*.
+
+يعتمد كل Service على db readiness.
+
+11) السياسات، السجلات، المراقبة
+
+اجمع السجلات في مكان واحد (stdout مبدئيًا). أضف تنبيهات لاحقًا. طبّق سياسة retry/backoff عند فشل REST بين الخدمات.
+
+12) الاختبارات والتسليم
+
+وفّر نصوصًا لتشغيل الاختبارات (Pytest) لكل خدمة. أنشئ عينات Seed للبيانات: أدوار افتراضية، مدير نظام، خدمات نموذجية، قطع، مهندسون بتخصصات.
+قدّم وثائق docs/ تشرح نقاط النهاية، نماذج البيانات، أدوار المستخدمين، مصفوفة الصلاحيات، مخطط ERD مبسط لكل خدمة.
+
+13) القيود والمتطلبات الختامية
+
+لا تدرج أي ذكاء اصطناعي أو Chatbot الآن.
+
+التزم تمامًا بالمذكور أعلاه كمرجع تنفيذي وحيد.
+
+أي طلب غير مصرّح به يجب أن يُرفض من الخادم ويُسجّل في السجلات.
+
+نفّذ اختبار End-to-End للتأكد من الترابط الصحيح بين الوحدات (مثال: إضافة خدمة جديدة تظهر فورًا ضمن إنشاء أمر العمل، والتقارير تعكس التنفيذ، والدردشة لا تتأثر…).
