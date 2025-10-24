@@ -106,3 +106,20 @@ Preferred communication style: Simple, everyday language.
 - ws - WebSocket implementation for Node.js
 
 **Typography**: Google Fonts (Inter, Noto Sans Arabic, JetBrains Mono) loaded via CDN for bilingual support.
+
+## Security Considerations
+
+**Current Authentication Implementation**:
+- JWT tokens stored in localStorage and sent via Authorization Bearer headers
+- Session secret configurable via SESSION_SECRET environment variable
+- Token expiry set to 7 days
+
+**Recommended Security Improvements** (for production deployment):
+1. **Move to HttpOnly Cookies**: Migrate JWT tokens from localStorage to HttpOnly, Secure, SameSite=strict cookies to prevent XSS-based token theft
+2. **Implement CSRF Protection**: Add CSRF tokens or double-submit cookie pattern when using cookie-based auth
+3. **Token Rotation**: Implement refresh token rotation and revocation strategy
+4. **Rate Limiting**: Add rate limiting on authentication endpoints to prevent brute force attacks
+5. **Secure Headers**: Implement security headers (Content-Security-Policy, X-Frame-Options, etc.)
+6. **Token Expiry**: Consider shorter access token expiry times with refresh token mechanism
+
+**Current Status**: Basic JWT authentication is functional for development. The above improvements should be implemented before production deployment.

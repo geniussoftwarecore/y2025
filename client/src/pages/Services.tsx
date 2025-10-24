@@ -88,17 +88,14 @@ export default function Services() {
   // Create service mutation
   const createServiceMutation = useMutation({
     mutationFn: async (data: ServiceForm) => {
-      return apiRequest('/api/catalog/services', {
-        method: 'POST',
-        body: JSON.stringify({
-          nameAr: data.nameAr,
-          nameEn: data.nameEn,
-          descAr: data.descAr,
-          descEn: data.descEn,
-          price: Number(data.price),
-          durationMinutes: Number(data.durationMinutes),
-          isActive: true,
-        }),
+      return apiRequest('POST', '/api/catalog/services', {
+        nameAr: data.nameAr,
+        nameEn: data.nameEn,
+        descAr: data.descAr,
+        descEn: data.descEn,
+        price: Number(data.price),
+        expectedDurationMinutes: Number(data.durationMinutes),
+        isActive: true,
       });
     },
     onSuccess: () => {
@@ -122,14 +119,11 @@ export default function Services() {
   // Create part mutation
   const createPartMutation = useMutation({
     mutationFn: async (data: PartForm) => {
-      return apiRequest('/api/catalog/parts', {
-        method: 'POST',
-        body: JSON.stringify({
-          nameAr: data.nameAr,
-          nameEn: data.nameEn,
-          unitPrice: Number(data.unitPrice),
-          isActive: true,
-        }),
+      return apiRequest('POST', '/api/catalog/parts', {
+        nameAr: data.nameAr,
+        nameEn: data.nameEn,
+        unitPrice: Number(data.unitPrice),
+        isActive: true,
       });
     },
     onSuccess: () => {
@@ -269,7 +263,7 @@ export default function Services() {
                         <TableCell>{service.nameEn}</TableCell>
                         <TableCell>{service.nameAr}</TableCell>
                         <TableCell>${service.price}</TableCell>
-                        <TableCell>{service.durationMinutes} min</TableCell>
+                        <TableCell>{service.expectedDurationMinutes} min</TableCell>
                         <TableCell>
                           <Badge variant={service.isActive ? 'default' : 'secondary'}>
                             {service.isActive ? 'Active' : 'Inactive'}

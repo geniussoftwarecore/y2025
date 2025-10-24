@@ -96,10 +96,7 @@ export default function WorkOrders() {
   // Create work order mutation
   const createMutation = useMutation({
     mutationFn: async (data: CreateWorkOrderForm) => {
-      return apiRequest('/api/work/orders', {
-        method: 'POST',
-        body: JSON.stringify(data),
-      });
+      return apiRequest('POST', '/api/work/orders', data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/work/orders'] });
@@ -122,10 +119,7 @@ export default function WorkOrders() {
   // Assign engineer mutation
   const assignMutation = useMutation({
     mutationFn: async ({ orderId, engineerId }: { orderId: string; engineerId: string }) => {
-      return apiRequest(`/api/work/orders/${orderId}/assign`, {
-        method: 'PATCH',
-        body: JSON.stringify({ assignedEngineerId: engineerId }),
-      });
+      return apiRequest('PATCH', `/api/work/orders/${orderId}/assign`, { assignedEngineerId: engineerId });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/work/orders'] });
@@ -139,9 +133,7 @@ export default function WorkOrders() {
   // Start work order mutation
   const startMutation = useMutation({
     mutationFn: async (orderId: string) => {
-      return apiRequest(`/api/work/orders/${orderId}/start`, {
-        method: 'PATCH',
-      });
+      return apiRequest('PATCH', `/api/work/orders/${orderId}/start`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/work/orders'] });
@@ -155,9 +147,7 @@ export default function WorkOrders() {
   // Finish work order mutation
   const finishMutation = useMutation({
     mutationFn: async (orderId: string) => {
-      return apiRequest(`/api/work/orders/${orderId}/finish`, {
-        method: 'PATCH',
-      });
+      return apiRequest('PATCH', `/api/work/orders/${orderId}/finish`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/work/orders'] });
@@ -171,9 +161,7 @@ export default function WorkOrders() {
   // Deliver work order mutation
   const deliverMutation = useMutation({
     mutationFn: async (orderId: string) => {
-      return apiRequest(`/api/work/orders/${orderId}/deliver`, {
-        method: 'PATCH',
-      });
+      return apiRequest('PATCH', `/api/work/orders/${orderId}/deliver`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/work/orders'] });
@@ -202,8 +190,8 @@ export default function WorkOrders() {
 
   const filteredOrders = workOrders.filter(order => 
     order.vehicleIdent.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    order.vehicleMake.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    order.vehicleModel.toLowerCase().includes(searchTerm.toLowerCase())
+    order.vehicleMake?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    order.vehicleModel?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const canAssign = user?.role === 'admin' || user?.role === 'supervisor';

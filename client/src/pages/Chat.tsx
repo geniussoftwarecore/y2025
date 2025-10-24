@@ -131,12 +131,9 @@ export default function Chat() {
         }));
       } else {
         // Fallback to REST API
-        return apiRequest(`/api/chat/messages`, {
-          method: 'POST',
-          body: JSON.stringify({
-            channelId: selectedChannel,
-            body,
-          }),
+        return apiRequest('POST', `/api/chat/messages`, {
+          channelId: selectedChannel,
+          body,
         });
       }
     },
