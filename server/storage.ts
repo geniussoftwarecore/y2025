@@ -348,3 +348,47 @@ export class DatabaseStorage implements IStorage {
     return thread || undefined;
   }
 
+  async createCustomerThread(insertThread: InsertCustomerThread): Promise<CustomerThread> {
+    const [thread] = await db.insert(customerThreads).values(insertThread).returning();
+    return thread;
+  }
+
+  // Notifications
+  async getNotifications(userId: string): Promise<Notification[]> {
+    return await db
+      .select()
+      .from(notifications)
+      .where(eq(notifications.userId, userId))
+      .orderBy(desc(notifications.createdAt));
+  }
+
+  async createNotification(insertNotification: InsertNotification): Promise<Notification> {
+    const [notification] = await db.insert(notifications).values(insertNotification).returning();
+    return notification;
+  }
+
+  async markNotificationAsRead(id: string, userId: string): Promise<Notification | undefined> {
+    const [notification] = await db
+      .update(notifications)
+      .set({ isRead: true })
+      .where(and(eq(notifications.id, id), eq(notifications.userId, userId)))
+      .returning();
+    return notification || undefined;
+  }
+
+  async markAllNotificationsAsRead(userId: string): Promise<void> {
+    await db
+      .update(notifications)
+      .set({ isRead: true })
+      .where(eq(notifications.userId, userId));
+  }
+
+  async deleteNotification(id: string, userId: string): Promise<void> {
+    await db
+      .delete(notifications)
+      .where(and(eq(notifications.id, id), eq(notifications.userId, userId)));
+  }
+}
+
+export const storage = new DatabaseStorage();
+
