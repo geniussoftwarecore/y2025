@@ -4,10 +4,13 @@ import { WebSocketServer, WebSocket } from "ws";
 import express from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
 import { storage } from "./storage";
 import { authenticateToken, requireRole, generateToken, type AuthRequest } from "./middleware/auth";
-import { insertUserSchema } from "@shared/schema";
+import { insertUserSchema, passwordResetTokens } from "@shared/schema";
 import { z } from "zod";
+import { db } from "./db";
+import { sql } from "drizzle-orm";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // ===== Authentication Routes =====
@@ -218,29 +221,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ message: "If the email exists, a reset link has been sent" });
       }
 
-      // Generate reset token
-      const resetToken = jwt.sign(
-        { userId: user.id, purpose: "password_reset" },
-        process.env.SESSION_SECRET || "development-secret-key",
-        { expiresIn: "1h" }
-      );
+      // Generate a cryptographically secure random reset token
+      const resetToken = crypto.randomBytes(32).toString('hex');
 
-      // Store token in database
+      // Hash the token before storing (security best practice)
+      const hashedToken = await bcrypt.hash(resetToken, 10);
+
+      // Store hashed token in database
       const expiresAt = new Date();
       expiresAt.setHours(expiresAt.getHours() + 1);
 
       await storage.createPasswordResetToken({
         userId: user.id,
-        token: resetToken,
+        token: hashedToken,
         expiresAt,
       });
 
-      // In production, send email here
-      console.log(`Password reset token for ${email}: ${resetToken}`);
+      // In production, send email/SMS here with reset link
+      if (process.env.NODE_ENV === "production") {
+        // TODO: Send email with reset link
+        // Example: await sendEmail(email, `Reset your password: ${resetUrl}?token=${resetToken}`);
+      } else {
+        // Development only: log token to console
+        console.log(`⚠️ DEV MODE ONLY: Password reset token for ${email}: ${resetToken}`);
+        console.log(`⚠️ DEV MODE ONLY: Reset URL: /reset-password?token=${resetToken}`);
+      }
 
       res.json({ 
-        message: "If the email exists, a reset link has been sent",
-        token: resetToken // Only for development, remove in production
+        message: "If the email exists, a reset link has been sent"
       });
     } catch (error) {
       console.error("Forgot password error:", error);
@@ -260,23 +268,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Password must be at least 6 characters" });
       }
 
-      // Verify token
-      const resetToken = await storage.getPasswordResetToken(token);
-      if (!resetToken) {
-        return res.status(400).json({ error: "Invalid or expired token" });
+      // Find all non-expired password reset tokens and verify against hashed values
+      // Note: We must scan all tokens because they are hashed
+      // In a high-volume production environment, consider adding an index or token selector
+      const now = new Date();
+      const activeTokens = await db
+        .select()
+        .from(passwordResetTokens)
+        .where(sql`${passwordResetTokens.expiresAt} > ${now}`);
+      
+      let validToken = null;
+      for (const storedToken of activeTokens) {
+        const isValid = await bcrypt.compare(token, storedToken.token);
+        if (isValid) {
+          validToken = storedToken;
+          break;
+        }
       }
 
-      if (new Date() > resetToken.expiresAt) {
-        await storage.deletePasswordResetToken(token);
-        return res.status(400).json({ error: "Token has expired" });
+      if (!validToken) {
+        return res.status(400).json({ error: "Invalid or expired token" });
       }
 
       // Update password
       const hashedPassword = await bcrypt.hash(newPassword, 10);
-      await storage.updateUser(resetToken.userId, { hashedPassword });
+      await storage.updateUser(validToken.userId, { hashedPassword });
 
       // Delete used token
-      await storage.deletePasswordResetToken(token);
+      await storage.deletePasswordResetToken(validToken.token);
 
       res.json({ message: "Password reset successfully" });
     } catch (error) {
