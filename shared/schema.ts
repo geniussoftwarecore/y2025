@@ -318,3 +318,30 @@ export const insertCustomerThreadSchema = createInsertSchema(customerThreads).om
 });
 export type InsertCustomerThread = z.infer<typeof insertCustomerThreadSchema>;
 export type CustomerThread = typeof customerThreads.$inferSelect;
+
+// ===== Notifications =====
+export const notifications = pgTable("notifications", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  type: text("type").notNull().default("info"), // info, success, warning, error
+  relatedEntityType: text("related_entity_type"), // work_order, message, user, etc.
+  relatedEntityId: uuid("related_entity_id"),
+  isRead: boolean("is_read").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  user: one(users, {
+    fields: [notifications.userId],
+    references: [users.id],
+  }),
+}));
+
+export const insertNotificationSchema = createInsertSchema(notifications).omit({ 
+  id: true, 
+  createdAt: true 
+});
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+export type Notification = typeof notifications.$inferSelect;

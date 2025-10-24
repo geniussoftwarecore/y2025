@@ -12,6 +12,7 @@ import {
   messages,
   customerThreads,
   passwordResetTokens,
+  notifications,
   type User,
   type InsertUser,
   type Service,
@@ -32,6 +33,8 @@ import {
   type InsertCustomerThread,
   type PasswordResetToken,
   type InsertPasswordResetToken,
+  type Notification,
+  type InsertNotification,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, sql } from "drizzle-orm";
@@ -96,6 +99,13 @@ export interface IStorage {
   getCustomerThreads(): Promise<CustomerThread[]>;
   getCustomerThread(customerId: string): Promise<CustomerThread | undefined>;
   createCustomerThread(thread: InsertCustomerThread): Promise<CustomerThread>;
+
+  // Notifications
+  getNotifications(userId: string): Promise<Notification[]>;
+  createNotification(notification: InsertNotification): Promise<Notification>;
+  markNotificationAsRead(id: string, userId: string): Promise<Notification | undefined>;
+  markAllNotificationsAsRead(userId: string): Promise<void>;
+  deleteNotification(id: string, userId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -338,10 +348,3 @@ export class DatabaseStorage implements IStorage {
     return thread || undefined;
   }
 
-  async createCustomerThread(insertThread: InsertCustomerThread): Promise<CustomerThread> {
-    const [thread] = await db.insert(customerThreads).values(insertThread).returning();
-    return thread;
-  }
-}
-
-export const storage = new DatabaseStorage();

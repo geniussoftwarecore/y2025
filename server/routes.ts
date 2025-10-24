@@ -603,6 +603,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ===== Notification Routes =====
+  app.get("/api/notifications", authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const notifications = await storage.getNotifications(req.user!.id);
+      res.json(notifications);
+    } catch (error) {
+      console.error("Get notifications error:", error);
+      res.status(500).json({ error: "Failed to fetch notifications" });
+    }
+  });
+
+  app.patch("/api/notifications/:id/read", authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const notification = await storage.markNotificationAsRead(id, req.user!.id);
+      if (!notification) {
+        return res.status(404).json({ error: "Notification not found" });
+      }
+      res.json(notification);
+    } catch (error) {
+      console.error("Mark notification as read error:", error);
+      res.status(500).json({ error: "Failed to update notification" });
+    }
+  });
+
+  app.patch("/api/notifications/read-all", authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      await storage.markAllNotificationsAsRead(req.user!.id);
+      res.json({ message: "All notifications marked as read" });
+    } catch (error) {
+      console.error("Mark all notifications as read error:", error);
+      res.status(500).json({ error: "Failed to update notifications" });
+    }
+  });
+
+  app.delete("/api/notifications/:id", authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteNotification(id, req.user!.id);
+      res.json({ message: "Notification deleted" });
+    } catch (error) {
+      console.error("Delete notification error:", error);
+      res.status(500).json({ error: "Failed to delete notification" });
+    }
+  });
+
   // ===== Reports Routes =====
   app.get("/api/reports/overview", authenticateToken, requireRole("admin", "supervisor"), async (req: AuthRequest, res) => {
     try {
