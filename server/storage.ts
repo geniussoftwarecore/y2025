@@ -11,6 +11,7 @@ import {
   chatChannels,
   messages,
   customerThreads,
+  passwordResetTokens,
   type User,
   type InsertUser,
   type Service,
@@ -29,6 +30,8 @@ import {
   type InsertMessage,
   type CustomerThread,
   type InsertCustomerThread,
+  type PasswordResetToken,
+  type InsertPasswordResetToken,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, sql } from "drizzle-orm";
@@ -61,6 +64,13 @@ export interface IStorage {
   getSpecializations(): Promise<Specialization[]>;
   getSpecialization(id: string): Promise<Specialization | undefined>;
   createSpecialization(spec: InsertSpecialization): Promise<Specialization>;
+  updateSpecialization(id: string, data: Partial<Specialization>): Promise<Specialization | undefined>;
+  deleteSpecialization(id: string): Promise<void>;
+
+  // Password Reset
+  createPasswordResetToken(token: InsertPasswordResetToken): Promise<PasswordResetToken>;
+  getPasswordResetToken(token: string): Promise<PasswordResetToken | undefined>;
+  deletePasswordResetToken(token: string): Promise<void>;
 
   // Work Orders
   getWorkOrders(): Promise<WorkOrder[]>;
@@ -196,6 +206,37 @@ export class DatabaseStorage implements IStorage {
   async createSpecialization(insertSpec: InsertSpecialization): Promise<Specialization> {
     const [spec] = await db.insert(specializations).values(insertSpec).returning();
     return spec;
+  }
+
+  async updateSpecialization(id: string, data: Partial<Specialization>): Promise<Specialization | undefined> {
+    const [spec] = await db
+      .update(specializations)
+      .set(data)
+      .where(eq(specializations.id, id))
+      .returning();
+    return spec || undefined;
+  }
+
+  async deleteSpecialization(id: string): Promise<void> {
+    await db.delete(specializations).where(eq(specializations.id, id));
+  }
+
+  // Password Reset
+  async createPasswordResetToken(insertToken: InsertPasswordResetToken): Promise<PasswordResetToken> {
+    const [token] = await db.insert(passwordResetTokens).values(insertToken).returning();
+    return token;
+  }
+
+  async getPasswordResetToken(token: string): Promise<PasswordResetToken | undefined> {
+    const [resetToken] = await db
+      .select()
+      .from(passwordResetTokens)
+      .where(eq(passwordResetTokens.token, token));
+    return resetToken || undefined;
+  }
+
+  async deletePasswordResetToken(token: string): Promise<void> {
+    await db.delete(passwordResetTokens).where(eq(passwordResetTokens.token, token));
   }
 
   // Work Orders

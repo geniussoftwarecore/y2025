@@ -207,6 +207,84 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Password Reset Routes
+  app.post("/api/auth/forgot-password", async (req, res) => {
+    try {
+      const { email } = req.body;
+
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        // Don't reveal if email exists
+        return res.json({ message: "If the email exists, a reset link has been sent" });
+      }
+
+      // Generate reset token
+      const resetToken = jwt.sign(
+        { userId: user.id, purpose: "password_reset" },
+        process.env.SESSION_SECRET || "development-secret-key",
+        { expiresIn: "1h" }
+      );
+
+      // Store token in database
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + 1);
+
+      await storage.createPasswordResetToken({
+        userId: user.id,
+        token: resetToken,
+        expiresAt,
+      });
+
+      // In production, send email here
+      console.log(`Password reset token for ${email}: ${resetToken}`);
+
+      res.json({ 
+        message: "If the email exists, a reset link has been sent",
+        token: resetToken // Only for development, remove in production
+      });
+    } catch (error) {
+      console.error("Forgot password error:", error);
+      res.status(500).json({ error: "Failed to process request" });
+    }
+  });
+
+  app.post("/api/auth/reset-password", async (req, res) => {
+    try {
+      const { token, newPassword } = req.body;
+
+      if (!token || !newPassword) {
+        return res.status(400).json({ error: "Token and new password required" });
+      }
+
+      if (newPassword.length < 6) {
+        return res.status(400).json({ error: "Password must be at least 6 characters" });
+      }
+
+      // Verify token
+      const resetToken = await storage.getPasswordResetToken(token);
+      if (!resetToken) {
+        return res.status(400).json({ error: "Invalid or expired token" });
+      }
+
+      if (new Date() > resetToken.expiresAt) {
+        await storage.deletePasswordResetToken(token);
+        return res.status(400).json({ error: "Token has expired" });
+      }
+
+      // Update password
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      await storage.updateUser(resetToken.userId, { hashedPassword });
+
+      // Delete used token
+      await storage.deletePasswordResetToken(token);
+
+      res.json({ message: "Password reset successfully" });
+    } catch (error) {
+      console.error("Reset password error:", error);
+      res.status(500).json({ error: "Failed to reset password" });
+    }
+  });
+
   // ===== Service Catalog Routes =====
   app.get("/api/catalog/services", authenticateToken, async (req: AuthRequest, res) => {
     try {
@@ -262,6 +340,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.patch("/api/catalog/parts/:id", authenticateToken, requireRole("admin", "supervisor"), async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const part = await storage.updateSparePart(id, req.body);
+      if (!part) {
+        return res.status(404).json({ error: "Part not found" });
+      }
+      res.json(part);
+    } catch (error) {
+      console.error("Update part error:", error);
+      res.status(500).json({ error: "Failed to update part" });
+    }
+  });
+
+  app.delete("/api/catalog/parts/:id", authenticateToken, requireRole("admin", "supervisor"), async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteSparePart(id);
+      res.json({ message: "Part deleted successfully" });
+    } catch (error) {
+      console.error("Delete part error:", error);
+      res.status(500).json({ error: "Failed to delete part" });
+    }
+  });
+
   app.get("/api/catalog/specializations", authenticateToken, async (req: AuthRequest, res) => {
     try {
       const specializations = await storage.getSpecializations();
@@ -279,6 +382,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Create specialization error:", error);
       res.status(500).json({ error: "Failed to create specialization" });
+    }
+  });
+
+  app.patch("/api/catalog/specializations/:id", authenticateToken, requireRole("admin", "supervisor"), async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const specialization = await storage.updateSpecialization(id, req.body);
+      if (!specialization) {
+        return res.status(404).json({ error: "Specialization not found" });
+      }
+      res.json(specialization);
+    } catch (error) {
+      console.error("Update specialization error:", error);
+      res.status(500).json({ error: "Failed to update specialization" });
+    }
+  });
+
+  app.delete("/api/catalog/specializations/:id", authenticateToken, requireRole("admin", "supervisor"), async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteSpecialization(id);
+      res.json({ message: "Specialization deleted successfully" });
+    } catch (error) {
+      console.error("Delete specialization error:", error);
+      res.status(500).json({ error: "Failed to delete specialization" });
     }
   });
 
