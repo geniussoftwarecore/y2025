@@ -151,6 +151,17 @@
     "avgCompletionTime": "Avg. Completion Time",
     "customerSatisfaction": "Customer Satisfaction"
   },
+  "notifications": {
+    "title": "Notifications",
+    "markAllRead": "Mark all as read",
+    "markRead": "Mark read",
+    "delete": "Delete",
+    "empty": "No notifications",
+    "justNow": "Just now",
+    "minutesAgo": "{{count}} min ago",
+    "hoursAgo": "{{count}} hours ago",
+    "daysAgo": "{{count}} days ago"
+  },
   "common": {
     "save": "Save",
     "cancel": "Cancel",

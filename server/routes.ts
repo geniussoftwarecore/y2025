@@ -11,6 +11,12 @@ import { insertUserSchema, passwordResetTokens } from "@shared/schema";
 import { z } from "zod";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
+import {
+  getWorkOrderAssignedMessage,
+  getWorkOrderCompletedMessage,
+  getWorkOrderDeliveredMessage,
+  formatNotificationForUser,
+} from "./notification-messages";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // ===== Authentication Routes =====
@@ -474,6 +480,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Work order not found" });
       }
 
+      const engineer = await storage.getUser(assignedEngineerId);
+      if (engineer) {
+        const notificationMessage = getWorkOrderAssignedMessage({
+          workOrderId: id,
+          orderId: id,
+        });
+        const formattedMessage = formatNotificationForUser(
+          notificationMessage,
+          engineer.preferredLanguage
+        );
+
+        await storage.createNotification({
+          userId: assignedEngineerId,
+          title: formattedMessage.title,
+          message: formattedMessage.message,
+          type: "info",
+          relatedEntityType: "work_order",
+          relatedEntityId: id,
+        });
+      }
+
       res.json(order);
     } catch (error) {
       console.error("Assign work order error:", error);
@@ -514,6 +541,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Work order not found" });
       }
 
+      if (order.openedById) {
+        const opener = await storage.getUser(order.openedById);
+        if (opener) {
+          const notificationMessage = getWorkOrderCompletedMessage({
+            workOrderId: id,
+            orderId: id,
+          });
+          const formattedMessage = formatNotificationForUser(
+            notificationMessage,
+            opener.preferredLanguage
+          );
+
+          await storage.createNotification({
+            userId: order.openedById,
+            title: formattedMessage.title,
+            message: formattedMessage.message,
+            type: "success",
+            relatedEntityType: "work_order",
+            relatedEntityId: id,
+          });
+        }
+      }
+
       res.json(order);
     } catch (error) {
       console.error("Finish work order error:", error);
@@ -532,6 +582,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (!order) {
         return res.status(404).json({ error: "Work order not found" });
+      }
+
+      if (order.customerId) {
+        const customer = await storage.getUser(order.customerId);
+        if (customer) {
+          const notificationMessage = getWorkOrderDeliveredMessage({
+            workOrderId: id,
+            orderId: id,
+          });
+          const formattedMessage = formatNotificationForUser(
+            notificationMessage,
+            customer.preferredLanguage
+          );
+
+          await storage.createNotification({
+            userId: order.customerId,
+            title: formattedMessage.title,
+            message: formattedMessage.message,
+            type: "success",
+            relatedEntityType: "work_order",
+            relatedEntityId: id,
+          });
+        }
       }
 
       res.json(order);
@@ -672,7 +745,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create HTTP server
   const httpServer = createServer(app);
 
-  // ===== WebSocket Setup for Chat =====
+  // ===== WebSocket Setup for Chat and Notifications =====
   // Blueprint reference: javascript_websocket
   const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
 
@@ -680,6 +753,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     userId?: string;
     channelId?: string;
   }
+
+  // Helper function to broadcast notifications to specific users
+  const broadcastNotification = (userId: string, notification: any) => {
+    wss.clients.forEach((client) => {
+      const wsClient = client as WebSocketClient;
+      if (
+        wsClient.readyState === WebSocket.OPEN &&
+        wsClient.userId === userId
+      ) {
+        wsClient.send(
+          JSON.stringify({
+            type: 'new_notification',
+            notification,
+          })
+        );
+      }
+    });
+  };
 
   wss.on('connection', (ws: WebSocketClient) => {
     console.log('Client connected to WebSocket');

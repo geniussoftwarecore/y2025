@@ -151,6 +151,17 @@
     "avgCompletionTime": "متوسط وقت الإنجاز",
     "customerSatisfaction": "رضا العملاء"
   },
+  "notifications": {
+    "title": "الإشعارات",
+    "markAllRead": "تحديد الكل كمقروء",
+    "markRead": "تحديد كمقروء",
+    "delete": "حذف",
+    "empty": "لا توجد إشعارات",
+    "justNow": "الآن",
+    "minutesAgo": "منذ {{count}} دقيقة",
+    "hoursAgo": "منذ {{count}} ساعة",
+    "daysAgo": "منذ {{count}} يوم"
+  },
   "common": {
     "save": "حفظ",
     "cancel": "إلغاء",
